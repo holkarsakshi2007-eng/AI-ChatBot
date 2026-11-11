@@ -1,17 +1,15 @@
+import os
 from google import genai
 from google.genai import types
 import streamlit as st
-
-# ==========================================
-# HARDCODE YOUR API KEY HERE
-# ==========================================
-if "AQ.Ab8RN6L5Yj6s3Hvm_lgRDDKycDq-WsTjm2i-IYxX2TWdxLV4qg" in st.secrets:
-  os.environ["AQ.Ab8RN6L5Yj6s3Hvm_lgRDDKycDq-WsTjm2i-IYxX2TWdxLV4qg"] = st.secrets["AQ.Ab8RN6L5Yj6s3Hvm_lgRDDKycDq-WsTjm2i-IYxX2TWdxLV4qg"]
 
 # Initialize Streamlit Page
 st.set_page_config(
     page_title="OOPs Interactive Tutor", page_icon="⚡", layout="wide"
 )
+
+# Safely fetch the API key from Streamlit secrets or environment variables
+api_key = st.secrets.get("GEMINI_API_KEY") or os.getenv("GEMINI_API_KEY")
 
 # System Instruction with strict formatting guidance
 SYSTEM_INSTRUCTION = """
@@ -27,11 +25,11 @@ Guidelines:
 
 # Cache client initialization to prevent re-instantiating on every rerun
 @st.cache_resource
-def get_gemini_client(api_key: str):
-  return genai.Client(api_key=api_key)
+def get_gemini_client(key: str):
+  return genai.Client(api_key=key)
 
 
-client = get_gemini_client(API_KEY)
+client = get_gemini_client(api_key)
 
 # Initialize Chat Session in Streamlit State using Gemini 3.7 Flash
 if "chat_session" not in st.session_state:
