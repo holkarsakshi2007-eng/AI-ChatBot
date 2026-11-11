@@ -5,7 +5,8 @@ import streamlit as st
 # ==========================================
 # HARDCODE YOUR API KEY HERE
 # ==========================================
-client = genai.Client(api_key=st.secrets["AQ.Ab8RN6L5Yj6s3Hvm_lgRDDKycDq-WsTjm2i-IYxX2TWdxLV4qg"])
+if "AQ.Ab8RN6L5Yj6s3Hvm_lgRDDKycDq-WsTjm2i-IYxX2TWdxLV4qg" in st.secrets:
+  os.environ["AQ.Ab8RN6L5Yj6s3Hvm_lgRDDKycDq-WsTjm2i-IYxX2TWdxLV4qg"] = st.secrets["AQ.Ab8RN6L5Yj6s3Hvm_lgRDDKycDq-WsTjm2i-IYxX2TWdxLV4qg"]
 
 # Initialize Streamlit Page
 st.set_page_config(
