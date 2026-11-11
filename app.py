@@ -8,8 +8,12 @@ st.set_page_config(
     page_title="OOPs Interactive Tutor", page_icon="⚡", layout="wide"
 )
 
-# Safely fetch the API key from Streamlit secrets or environment variables
-api_key = st.secrets.get("GEMINI_API_KEY") or os.getenv("GEMINI_API_KEY")
+# ==========================================
+# API KEY CONFIGURATION
+# ==========================================
+# This checks Streamlit Cloud secrets first, then environment variables,
+# and safely falls back if needed.
+API_KEY = st.secrets.get("GEMINI_API_KEY") or os.getenv("GEMINI_API_KEY", "")
 
 # System Instruction with strict formatting guidance
 SYSTEM_INSTRUCTION = """
@@ -25,11 +29,11 @@ Guidelines:
 
 # Cache client initialization to prevent re-instantiating on every rerun
 @st.cache_resource
-def get_gemini_client(key: str):
-  return genai.Client(api_key=key)
+def get_gemini_client(api_key: str):
+  return genai.Client(api_key=api_key)
 
 
-client = get_gemini_client(api_key)
+client = get_gemini_client(API_KEY)
 
 # Initialize Chat Session in Streamlit State using Gemini 3.7 Flash
 if "chat_session" not in st.session_state:
