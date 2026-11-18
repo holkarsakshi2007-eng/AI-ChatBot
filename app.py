@@ -1,4 +1,5 @@
 import os
+from pathlib import Path
 import time
 from google import genai
 from google.genai import types
@@ -28,12 +29,45 @@ Guidelines:
 """
 
 
-def get_initial_api_key() -> str:
-  env_key = os.environ.get("GEMINI_API_KEY", "AQ.Ab8RN6IV0G0p1Ib3maDXU0jEm-A302MpAXGI6VSJ8WXrg2lqwA").strip()
+def load_env_file() -> None:
+  """Load .env from the app directory (or current working directory)."""
+  env_path = Path(__file__).resolve().parent / ".env"
+  if not env_path.exists():
+    env_path = Path.cwd() / ".env"
+  if not env_path.exists():
+    return
+
+  try:
+    from dotenv import load_dotenv
+
+    load_dotenv(dotenv_path=env_path, override=True)
+    return
+  except ImportError:
+    pass
+
+  # Built-in fallback if python-dotenv is not installed
+  for raw_line in env_path.read_text(encoding="utf-8").splitlines():
+    line = raw_line.strip()
+    if not line or line.startswith("#") or "=" not in line:
+      continue
+    if line.startswith("export "):
+      line = line[len("export ") :].strip()
+    key, value = line.split("=", 1)
+    key = key.strip()
+    value = value.strip()
+    if len(value) >= 2 and value[0] == value[-1] and value[0] in ('"', "'"):
+      value = value[1:-1]
+    if key:
+      os.environ[key] = value
+
+
+def get_api_key() -> str:
+  load_env_file()
+  env_key = os.environ.get("GEMINI_API_KEY", "").strip()
   if env_key:
     return env_key
   try:
-    return st.secrets.get("GEMINI_API_KEY", "AQ.Ab8RN6IV0G0p1Ib3maDXU0jEm-A302MpAXGI6VSJ8WXrg2lqwA").strip()
+    return st.secrets.get("GEMINI_API_KEY", "").strip()
   except Exception:
     return ""
 
@@ -47,7 +81,9 @@ def build_sdk_history(messages: list[dict]) -> list[types.Content]:
   history = []
   for m in messages:
     role = "model" if m["role"] == "assistant" else "user"
-    history.append(types.Content(role=role, parts=[types.Part(text=m["content"])]))
+    history.append(
+        types.Content(role=role, parts=[types.Part(text=m["content"])])
+    )
   return history
 
 
@@ -62,22 +98,22 @@ def create_chat_session(client, model_id: str, history=None):
   )
 
 
+api_key = get_api_key()
+
+if not api_key:
+  st.error(
+      "`GEMINI_API_KEY` not found. Add `GEMINI_API_KEY=your_key` to your `.env`"
+      " file next to `app.py` and restart Streamlit."
+  )
+  st.stop()
+
+client = get_gemini_client(api_key)
+
 # ==========================================
-# SIDEBAR CONTROLS & API KEY / MODEL SETUP
+# SIDEBAR CONTROLS & INTERACTIVE PRESETS
 # ==========================================
 with st.sidebar:
   st.title("⚙️ Interactive Controls")
-
-  default_key = get_initial_api_key()
-  if default_key:
-    api_key = default_key
-  else:
-    api_key = st.text_input(
-        "Gemini API Key:",
-        type="password",
-        placeholder="Paste your new Gemini API key...",
-        help="Tip: Or run export GEMINI_API_KEY=... before launching Streamlit.",
-    ).strip()
 
   selected_model = st.selectbox("Gemini Model:", AVAILABLE_MODELS, index=0)
 
@@ -92,16 +128,6 @@ with st.sidebar:
   debug_btn = st.button("🐞 Debug Common OOP Bug")
   design_btn = st.button("🏗️ Explain Design Pattern")
   clear_btn = st.button("🗑️ Clear Chat History")
-
-if not api_key:
-  st.title("🎓 OOPs Interactive Learning Agent")
-  st.warning(
-      "Please set GEMINI_API_KEY in your terminal or enter your API key in"
-      " the sidebar to start."
-  )
-  st.stop()
-
-client = get_gemini_client(api_key)
 
 # Initialize or reset session when API key or selected model changes
 if (
@@ -122,9 +148,9 @@ if "messages" not in st.session_state:
   st.session_state.messages = [{
       "role": "assistant",
       "content": (
-          f"⚡ *Welcome to OOPs Interactive AI (Powered by {selected_model})!*\n"
-          "Pick a quick action from the sidebar or type any OOP question"
-          " below to get started."
+          "⚡ **Welcome to OOPs Interactive AI (Powered by"
+          f" `{selected_model}`)!**\nPick a quick action from the sidebar or"
+          " type any OOP question below to get started."
       ),
   }]
 
@@ -133,8 +159,9 @@ if clear_btn:
   st.session_state.messages = [{
       "role": "assistant",
       "content": (
-          f"⚡ *Chat cleared! Ready with {selected_model}.*\n"
-          "Pick a quick action from the sidebar or type any OOP question below."
+          f"⚡ **Chat cleared! Ready with `{selected_model}`.**\n"
+          "Pick a quick action from the sidebar or type any OOP question"
+          " below."
       ),
   }]
   st.session_state.chat_session = create_chat_session(client, selected_model)
@@ -154,7 +181,7 @@ elif design_btn:
 # ==========================================
 st.title("🎓 OOPs Interactive Learning Agent")
 st.caption(
-    f"Currently targeting code examples in *{selected_lang}* ({st.session_state.active_model})"
+    f"Currently targeting code examples in **{selected_lang}** (`{st.session_state.active_model}`)"
 )
 
 for msg in st.session_state.messages:
@@ -171,7 +198,6 @@ if active_query:
       else f"[{selected_lang} Context] {active_query}"
   )
 
-  # Snapshot prior history before appending current prompt (for clean fallback if needed)
   prior_history = build_sdk_history(st.session_state.messages)
 
   st.session_state.messages.append({"role": "user", "content": active_query})
@@ -182,7 +208,6 @@ if active_query:
     message_placeholder = st.empty()
     full_response = ""
 
-    # Try current model with brief retry, then fall back to alternate models on 503/429
     models_to_try = [st.session_state.active_model] + [
         m for m in AVAILABLE_MODELS if m != st.session_state.active_model
     ]
@@ -193,7 +218,8 @@ if active_query:
     for model_idx, model_name in enumerate(models_to_try):
       if model_idx > 0:
         message_placeholder.info(
-            f"{models_to_try[model_idx - 1]} is busy (503). Switching to {model_name}..."
+            f"`{models_to_try[model_idx - 1]}` is busy (503). Switching to"
+            f" `{model_name}`..."
         )
         st.session_state.chat_session = create_chat_session(
             client, model_name, history=prior_history
@@ -222,18 +248,19 @@ if active_query:
           last_error = e
           err_str = str(e)
           is_transient = any(
-              code in err_str for code in ("503", "UNAVAILABLE", "429", "RESOURCE_EXHAUSTED")
+              code in err_str
+              for code in ("503", "UNAVAILABLE", "429", "RESOURCE_EXHAUSTED")
           )
           if is_transient and not full_response:
             if attempt == 0:
               message_placeholder.info(
-                  f"{model_name} is experiencing high demand. Retrying..."
+                  f"`{model_name}` is experiencing high demand. Retrying..."
               )
               time.sleep(1.5)
               continue
-            break  # Move to next fallback model
+            break
           else:
-            break  # Non-transient error; stop retrying
+            break
 
       if succeeded:
         break
